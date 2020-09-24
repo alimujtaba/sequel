@@ -549,7 +549,7 @@ module Sequel
       def foreign_key_list(table, opts=OPTS)
         m = output_identifier_meth
         schema, _ = opts.fetch(:schema, schema_and_table(table))
-        oid = regclass_oid(table)
+        oid = regclass_oid(table, opts)
         reverse = opts[:reverse]
 
         if reverse

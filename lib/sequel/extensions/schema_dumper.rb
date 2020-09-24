@@ -81,7 +81,7 @@ module Sequel
       <<END_MIG
 Sequel.migration do
   change do
-#{ts.sort.map{|t| dump_table_foreign_keys(t)}.reject{|x| x == ''}.join("\n\n").gsub(/^/, '    ')}
+#{ts.sort.map{|t| dump_table_foreign_keys(t, options)}.reject{|x| x == ''}.join("\n\n").gsub(/^/, '    ')}
   end
 end
 END_MIG
@@ -262,11 +262,11 @@ END_MIG
       im = method(:index_to_generator_opts)
 
       if options[:indexes] != false && supports_index_parsing?
-        indexes = indexes(table).sort
+        indexes = indexes(table, options).sort
       end
 
       if options[:foreign_keys] != false && supports_foreign_key_parsing?
-        fk_list = foreign_key_list(table)
+        fk_list = foreign_key_list(table, options)
         
         if (sfk = options[:skipped_foreign_keys]) && (sfkt = sfk[table])
           fk_list.delete_if{|fk| sfkt.has_key?(fk[:columns])}
@@ -302,7 +302,7 @@ END_MIG
     # creating the index migration.
     def dump_table_indexes(table, meth, options=OPTS)
       if supports_index_parsing?
-        indexes = indexes(table).sort
+        indexes = indexes(table, options).sort
       else
         return ''
       end
@@ -334,7 +334,7 @@ END_MIG
     def sort_dumped_tables(tables, options=OPTS)
       if options[:foreign_keys] != false && supports_foreign_key_parsing?
         table_fks = {}
-        tables.each{|t| table_fks[t] = foreign_key_list(t)}
+        tables.each{|t| table_fks[t] = foreign_key_list(t, options)}
         # Remove self referential foreign keys, not important when sorting.
         table_fks.each{|t, fks| fks.delete_if{|fk| fk[:table] == t}}
         tables, skipped_foreign_keys = sort_dumped_tables_topologically(table_fks, [])

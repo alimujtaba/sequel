@@ -231,7 +231,7 @@ OUTPUT
 
   it "should include index information if available" do
     def @d.supports_index_parsing?; true end
-    def @d.indexes(t)
+    def @d.indexes(t, *o)
       {:i1=>{:columns=>[:c1], :unique=>false},
        :t1_c2_c1_index=>{:columns=>[:c2, :c1], :unique=>true, :deferrable=>true}}
     end
@@ -298,7 +298,7 @@ END_MIG
       t == :t1 ? [[:c2, {:db_type=>'integer'}]] : [[:c1, {:db_type=>'integer', :primary_key=>true, :auto_increment=>true}]]
     end
     def @d.supports_foreign_key_parsing?; true end
-    def @d.foreign_key_list(t)
+    def @d.foreign_key_list(t, *o)
       t == :t1 ? [{:columns=>[:c2], :table=>:t2, :key=>[:c1]}] : []
     end
     @d.dump_schema_migration.must_equal <<-END_MIG
@@ -322,7 +322,7 @@ END_MIG
       t == :t1 ? [[:c2, {:db_type=>'integer'}]] : [[:c1, {:db_type=>'integer'}]]
     end
     def @d.supports_foreign_key_parsing?; true end
-    def @d.foreign_key_list(t)
+    def @d.foreign_key_list(t, *o)
       t == :t1 ? [{:columns=>[:c2], :table=>:t2, :key=>[:c1]}] : [{:columns=>[:c1], :table=>:t1, :key=>[:c2]}]
     end
     @d.dump_schema_migration.must_equal <<-END_MIG
@@ -350,7 +350,7 @@ END_MIG
       t == :t1 ? [[:c2, {:db_type=>'integer'}]] : [[:c1, {:db_type=>'integer', :primary_key=>true, :auto_increment=>true}]]
     end
     def @d.supports_foreign_key_parsing?; true end
-    def @d.foreign_key_list(t)
+    def @d.foreign_key_list(t, *o)
       raise Sequel::DatabaseError unless [:t1, :t2].include?(t)
       t == :t1 ? [{:columns=>[:c2], :table=>:t2, :key=>[:c1]}] : []
     end
@@ -392,7 +392,7 @@ END_MIG
 
   it "should honor the :index_names => false option to not include names of indexes" do
     def @d.supports_index_parsing?; true end
-    def @d.indexes(t)
+    def @d.indexes(t, *o)
       {:i1=>{:columns=>[:c1], :unique=>false},
        :t1_c2_c1_index=>{:columns=>[:c2, :c1], :unique=>true}}
     end
@@ -424,7 +424,7 @@ END_MIG
   
   it "should make :index_names => :namespace option a noop if there is a  global index namespace" do
     def @d.supports_index_parsing?; true end
-    def @d.indexes(t)
+    def @d.indexes(t, *o)
       {:i1=>{:columns=>[:c1], :unique=>false},
        :t1_c2_c1_index=>{:columns=>[:c2, :c1], :unique=>false}}
     end
@@ -457,7 +457,7 @@ END_MIG
   it "should honor the :index_names => :namespace option to include names of indexes with prepended table name if there is no global index namespace" do
     def @d.global_index_namespace?; false end
     def @d.supports_index_parsing?; true end
-    def @d.indexes(t)
+    def @d.indexes(t, *o)
       {:i1=>{:columns=>[:c1], :unique=>false},
        :t1_c2_c1_index=>{:columns=>[:c2, :c1], :unique=>false}}
     end
@@ -522,7 +522,7 @@ END_MIG
 
   it "should have :foreign_keys option override :indexes => false disabling of foreign keys" do
     def @d.supports_foreign_key_parsing?; true end
-    def @d.foreign_key_list(t)
+    def @d.foreign_key_list(t, *o)
       t == :t1 ? [{:columns=>[:c2], :table=>:t2, :key=>[:c1]}] : []
     end
     @d.dump_schema_migration(:indexes=>false, :foreign_keys=>true).must_equal(<<OUTPUT)
@@ -547,7 +547,7 @@ OUTPUT
   it "should support dumping just indexes as a migration" do
     def @d.tables(o) [:t1] end
     def @d.supports_index_parsing?; true end
-    def @d.indexes(t)
+    def @d.indexes(t, *o)
       {:i1=>{:columns=>[:c1], :unique=>false},
        :t1_c2_c1_index=>{:columns=>[:c2, :c1], :unique=>true}}
     end
@@ -564,7 +564,7 @@ END_MIG
   it "should honor the :index_names => false option to not include names of indexes when dumping just indexes as a migration" do
     def @d.tables(o) [:t1] end
     def @d.supports_index_parsing?; true end
-    def @d.indexes(t)
+    def @d.indexes(t, *o)
       {:i1=>{:columns=>[:c1], :unique=>false},
        :t1_c2_c1_index=>{:columns=>[:c2, :c1], :unique=>true}}
     end
@@ -581,7 +581,7 @@ END_MIG
   it "should honor the :index_names => :namespace option be a noop if there is a global index namespace" do
     def @d.tables(o) [:t1, :t2] end
     def @d.supports_index_parsing?; true end
-    def @d.indexes(t)
+    def @d.indexes(t, *o)
       {:i1=>{:columns=>[:c1], :unique=>false},
        :t1_c2_c1_index=>{:columns=>[:c2, :c1], :unique=>false}}
     end
@@ -602,7 +602,7 @@ END_MIG
     def @d.global_index_namespace?; false end
     def @d.tables(o) [:t1, :t2] end
     def @d.supports_index_parsing?; true end
-    def @d.indexes(t)
+    def @d.indexes(t, *o)
       {:i1=>{:columns=>[:c1], :unique=>false},
        :t1_c2_c1_index=>{:columns=>[:c2, :c1], :unique=>false}}
     end
