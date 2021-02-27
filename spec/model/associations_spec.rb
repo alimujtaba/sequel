@@ -2011,6 +2011,15 @@ describe Sequel::Model, "one_to_many" do
     p.instance_variable_get(:@x).must_equal c
   end
 
+  it "should support an :adder option that accepts keywords" do
+    @c2.one_to_many :attributes, :class => @c1, :adder=>eval('proc{|x, foo: nil| @x = [x, foo]}')
+    p = @c2.load(:id=>10)
+    c = @c1.load(:id=>123)
+    def c._node_id=; raise; end
+    p.add_attribute(c, foo: 1)
+    p.instance_variable_get(:@x).must_equal [c, 1]
+  end if RUBY_VERSION >= '2.0'
+
   it "should allow additional arguments given to the add_ method and pass them onwards to the _add_ method" do
     @c2.one_to_many :attributes, :class => @c1
     p = @c2.load(:id=>10)
@@ -2046,6 +2055,15 @@ describe Sequel::Model, "one_to_many" do
     p.remove_attribute(c)
     p.instance_variable_get(:@x).must_equal c
   end
+
+  it "should support a :remover option that accepts keywords" do
+    @c2.one_to_many :attributes, :class => @c1, :remover=>eval('proc{|x, foo: nil| @x = [x, foo]}')
+    p = @c2.load(:id=>10)
+    c = @c1.load(:id=>123)
+    def c._node_id=; raise; end
+    p.remove_attribute(c, foo: 1)
+    p.instance_variable_get(:@x).must_equal [c, 1]
+  end if RUBY_VERSION >= '2.0'
 
   it "should allow additional arguments given to the remove_ method and pass them onwards to the _remove_ method" do
     @c2.one_to_many :attributes, :class => @c1, :reciprocal=>nil
@@ -2090,6 +2108,13 @@ describe Sequel::Model, "one_to_many" do
     p.remove_all_attributes
     p.instance_variable_get(:@x).must_equal :foo
   end
+
+  it "should support a :clearer option that supports keywords" do
+    @c2.one_to_many :attributes, :class => @c1, :clearer=>eval('proc{|foo: nil| @x = foo}')
+    p = @c2.load(:id=>10)
+    p.remove_all_attributes(foo: 1)
+    p.instance_variable_get(:@x).must_equal 1
+  end if RUBY_VERSION >= '2.0'
 
   it "should support (before|after)_(add|remove) callbacks" do
     h = []
@@ -3545,6 +3570,12 @@ describe "Filtering by associations" do
 
   it "should be able to filter on many_to_many associations with block" do
     @Album.filter(:b_tags=>@Tag.load(:id=>3)).sql.must_equal "SELECT * FROM albums WHERE (albums.id IN (SELECT albums_tags.album_id FROM tags INNER JOIN albums_tags ON (albums_tags.tag_id = tags.id) WHERE ((name = 'B') AND (albums_tags.album_id IS NOT NULL) AND (tags.id = 3))))"
+  end
+
+  it "should not use an eager limit strategy if the strategy is not specified and the model defaults to not using one" do
+    @Album.default_eager_limit_strategy = nil
+    @Album.one_to_many :l_tracks2, :clone=>:l_tracks
+    @Album.filter(:l_tracks2=>@Track.load(:id=>5, :album_id=>3)).sql.must_equal "SELECT * FROM albums WHERE (albums.id IN (SELECT tracks.album_id FROM tracks WHERE ((tracks.album_id IS NOT NULL) AND (tracks.id = 5))))"
   end
 
   it "should be able to filter on one_to_many associations with :limit" do

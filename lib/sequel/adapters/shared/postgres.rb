@@ -781,7 +781,7 @@ module Sequel
         return @server_version if @server_version
         ds = dataset
         ds = ds.server(server) if server
-        @server_version ||= ds.with_sql("SELECT CAST(current_setting('server_version_num') AS integer) AS v").single_value rescue 0
+        @server_version = swallow_database_error{ds.with_sql("SELECT CAST(current_setting('server_version_num') AS integer) AS v").single_value} || 0
       end
 
       # PostgreSQL supports CREATE TABLE IF NOT EXISTS on 9.1+
@@ -846,7 +846,7 @@ module Sequel
       # :schema :: The schema to search
       # :server :: The server to use
       def tables(opts=OPTS, &block)
-        pg_class_relname('r', opts, &block)
+        pg_class_relname(['r', 'p'], opts, &block)
       end
 
       # Check whether the given type name string/symbol (e.g. :hstore) is supported by
@@ -1500,9 +1500,11 @@ module Sequel
       # disallowed or there is a size specified, use the varchar type.
       # Otherwise use the text type.
       def type_literal_generic_string(column)
-        if column[:fixed]
+        if column[:text]
+          :text
+        elsif column[:fixed]
           "char(#{column[:size]||255})"
-        elsif column[:text] == false or column[:size]
+        elsif column[:text] == false || column[:size]
           "varchar(#{column[:size]||255})"
         else
           :text

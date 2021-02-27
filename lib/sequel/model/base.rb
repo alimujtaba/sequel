@@ -508,7 +508,9 @@ module Sequel
 
         m.configure(self, *args, &block) if m.respond_to?(:configure)
       end
+      # :nocov:
       ruby2_keywords(:plugin) if respond_to?(:ruby2_keywords, true)
+      # :nocov:
 
       # Returns primary key attribute hash.  If using a composite primary key
       # value such be an array with values for each primary key in the correct
@@ -727,8 +729,14 @@ module Sequel
         im = instance_methods
         overridable_methods_module.module_eval do
           meth = :"#{column}="
-          define_method(column){self[column]} unless im.include?(column)
-          define_method(meth){|v| self[column] = v} unless im.include?(meth)
+          unless im.include?(column)
+            define_method(column){self[column]}
+            alias_method(column, column)
+          end
+          unless im.include?(meth)
+            define_method(meth){|v| self[column] = v}
+            alias_method(meth, meth)
+          end
         end
       end
   
@@ -741,8 +749,14 @@ module Sequel
         im = instance_methods
         columns.each do |column|
           meth = :"#{column}="
-          overridable_methods_module.module_eval("def #{column}; self[:#{column}] end", __FILE__, __LINE__) unless im.include?(column)
-          overridable_methods_module.module_eval("def #{meth}(v); self[:#{column}] = v end", __FILE__, __LINE__) unless im.include?(meth)
+          unless im.include?(column)
+            overridable_methods_module.module_eval("def #{column}; self[:#{column}] end", __FILE__, __LINE__)
+            overridable_methods_module.send(:alias_method, column, column)
+          end
+          unless im.include?(meth)
+            overridable_methods_module.module_eval("def #{meth}(v); self[:#{column}] = v end", __FILE__, __LINE__)
+            overridable_methods_module.send(:alias_method, meth, meth)
+          end
         end
       end
   
@@ -757,7 +771,10 @@ module Sequel
         else
           define_singleton_method(meth){|*args, &block| dataset.public_send(meth, *args, &block)}
         end
+        singleton_class.send(:alias_method, meth, meth)
+        # :nocov:
         singleton_class.send(:ruby2_keywords, meth) if respond_to?(:ruby2_keywords, true)
+        # :nocov:
       end
 
       # Get the schema from the database, fall back on checking the columns
@@ -1243,12 +1260,12 @@ module Sequel
       # Once an object is frozen, you cannot modify it's values, changed_columns,
       # errors, or dataset.
       def freeze
-        values.freeze
-        _changed_columns.freeze
         unless errors.frozen?
           validate
           errors.freeze
         end
+        values.freeze
+        _changed_columns.freeze
         this if !new? && model.primary_key
         super
       end

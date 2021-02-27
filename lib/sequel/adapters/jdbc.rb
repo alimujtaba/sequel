@@ -51,7 +51,19 @@ module Sequel
     # Raise a Sequel::AdapterNotFound if evaluating the class name raises a NameError.
     def self.load_driver(drv, gem=nil)
       load_gem(gem) if gem
-      eval drv
+      if drv.is_a?(String)
+        eval drv
+      else
+        *try, last = drv
+        try.each do |try_drv|
+          begin
+            return eval(try_drv)
+          rescue NameError
+          end
+        end
+
+        eval last
+      end
     rescue NameError
       raise Sequel::AdapterNotFound, "#{drv} not loaded#{", try installing jdbc-#{gem.to_s.downcase} gem" if gem}"
     end
@@ -59,11 +71,11 @@ module Sequel
     class TypeConvertor
       CONVERTORS = convertors = {}
       %w'Boolean Float Double Int Long Short'.each do |meth|
-        x = convertors[meth.to_sym] = Object.new
+        x = x = convertors[meth.to_sym] = Object.new
         class_eval("def x.call(r, i) v = r.get#{meth}(i); v unless r.wasNull end", __FILE__, __LINE__)
       end
       %w'Object Array String Time Date Timestamp BigDecimal Blob Bytes Clob'.each do |meth|
-        x = convertors[meth.to_sym] = Object.new
+        x = x = convertors[meth.to_sym] = Object.new
         class_eval("def x.call(r, i) r.get#{meth}(i) end", __FILE__, __LINE__)
       end
       x = convertors[:RubyTime] = Object.new

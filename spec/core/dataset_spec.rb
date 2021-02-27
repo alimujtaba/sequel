@@ -2892,6 +2892,11 @@ describe "Dataset #first and #last" do
     @d.order(:c, :d).last.must_equal(:s=>'SELECT * FROM test ORDER BY c DESC, d DESC LIMIT 1')
     @d.order(Sequel.desc(:e), :f).last.must_equal(:s=>'SELECT * FROM test ORDER BY e ASC, f DESC LIMIT 1')
   end
+
+  it "should raise an error for multiple arguments" do
+    proc{@d.first(1, :z=>10)}.must_raise Sequel::Error
+    proc{@d.last(1, :z=>10)}.must_raise Sequel::Error
+  end
 end
 
 describe "Dataset #first!" do
@@ -4964,17 +4969,39 @@ end
 
 describe "Modifying joined datasets" do
   before do
-    @ds = Sequel.mock.from(:b, :c).join(:d, [:id]).where(:id => 2).with_extend{def supports_modifying_joins?; true end}
+    @ds2 = Sequel.mock.from(:b, :c).join(:d, [:id]).where(:id => 2)
+    @ds = @ds2.with_extend{def supports_modifying_joins?; true end}
   end
 
-  it "should allow deleting from joined datasets" do
+  it "should not allow inserting into joined datasets" do
+    proc{@ds.insert(:a=>1)}.must_raise Sequel::InvalidOperation
+    proc{@ds2.insert(:a=>1)}.must_raise Sequel::InvalidOperation
+  end
+
+  it "should not allow truncating joined datasets" do
+    proc{@ds.truncate}.must_raise Sequel::InvalidOperation
+    proc{@ds2.truncate}.must_raise Sequel::InvalidOperation
+  end
+
+  it "should allow deleting from joined datasets if supported" do
     @ds.delete
     @ds.db.sqls.must_equal ['DELETE FROM b, c WHERE (id = 2)']
+
+    proc{@ds2.delete}.must_raise Sequel::InvalidOperation
+    @ds.db.sqls.must_equal []
   end
 
-  it "should allow updating joined datasets" do
+  it "should allow updating joined datasets if supported" do
     @ds.update(:a=>1)
     @ds.db.sqls.must_equal ['UPDATE b, c INNER JOIN d USING (id) SET a = 1 WHERE (id = 2)']
+
+    proc{@ds2.update(:a=>1)}.must_raise Sequel::InvalidOperation
+    @ds.db.sqls.must_equal []
+  end
+
+  deprecated "should have check_modification_allowed! private method" do
+    @ds.send(:check_modification_allowed!).must_be_nil
+    proc{@ds2.send(:check_modification_allowed!)}.must_raise Sequel::InvalidOperation
   end
 end
 

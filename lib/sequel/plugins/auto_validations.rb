@@ -14,7 +14,9 @@ module Sequel
     # the plugin looks at the database schema for the model's table.  To determine
     # the unique validations, Sequel looks at the indexes on the table.  In order
     # for this plugin to be fully functional, the underlying database adapter needs
-    # to support both schema and index parsing.
+    # to support both schema and index parsing.  Additionally, unique validations are
+    # only added for models that select from a simple table, they are not added for models
+    # that select from a subquery or joined dataset.
     #
     # This plugin uses the validation_helpers plugin underneath to implement the
     # validations.  It does not allow for any per-column validation message
@@ -50,6 +52,11 @@ module Sequel
     #
     # This works for unique_opts, max_length_opts, schema_types_opts,
     # explicit_not_null_opts, and not_null_opts.
+    #
+    # If you only want auto_validations to add validations to columns that do not already
+    # have an error associated with them, you can use the skip_invalid option:
+    #
+    #   Model.plugin :auto_validations, skip_invalid: true
     #
     # Usage:
     #
@@ -100,6 +107,13 @@ module Sequel
               h[type] = h[type].merge(type_opts).freeze
             end
           end
+
+          if opts[:skip_invalid]
+            [:not_null, :explicit_not_null, :max_length, :schema_types].each do |type|
+              h[type] = h[type].merge(:skip_invalid=>true).freeze
+            end
+          end
+
           @auto_validate_options = h.freeze
         end
       end

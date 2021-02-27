@@ -34,6 +34,13 @@
 
 require 'active_support/duration'
 
+# :nocov:
+begin
+  require 'active_support/version'
+rescue LoadError
+end
+# :nocov:
+
 module Sequel
   module Postgres
     module IntervalDatabaseMethods
@@ -61,34 +68,47 @@ module Sequel
 
       # Creates callable objects that convert strings into ActiveSupport::Duration instances.
       class Parser
+        # Whether ActiveSupport::Duration.new takes parts as array instead of hash
+        USE_PARTS_ARRAY = !defined?(ActiveSupport::VERSION::STRING) || ActiveSupport::VERSION::STRING < '5.1'
+
+        if defined?(ActiveSupport::Duration::SECONDS_PER_MONTH)
+          SECONDS_PER_MONTH = ActiveSupport::Duration::SECONDS_PER_MONTH
+          SECONDS_PER_YEAR = ActiveSupport::Duration::SECONDS_PER_YEAR
+        # :nocov:
+        else
+          SECONDS_PER_MONTH = 2592000
+          SECONDS_PER_YEAR = 31557600
+        # :nocov:
+        end
+
         # Parse the interval input string into an ActiveSupport::Duration instance.
         def call(string)
           raise(InvalidValue, "invalid or unhandled interval format: #{string.inspect}") unless matches = /\A([+-]?\d+ years?\s?)?([+-]?\d+ mons?\s?)?([+-]?\d+ days?\s?)?(?:(?:([+-])?(\d{2,10}):(\d\d):(\d\d(\.\d+)?))|([+-]?\d+ hours?\s?)?([+-]?\d+ mins?\s?)?([+-]?\d+(\.\d+)? secs?\s?)?)?\z/.match(string)
 
           value = 0
-          parts = []
+          parts = {}
 
           if v = matches[1]
             v = v.to_i
-            value += 31557600 * v
-            parts << [:years, v]
+            value += SECONDS_PER_YEAR * v
+            parts[:years] = v
           end
           if v = matches[2]
             v = v.to_i
-            value += 2592000 * v
-            parts << [:months, v]
+            value += SECONDS_PER_MONTH * v
+            parts[:months] = v
           end
           if v = matches[3]
             v = v.to_i
             value += 86400 * v
-            parts << [:days, v]
+            parts[:days] = v
           end
           if matches[5]
             seconds = matches[5].to_i * 3600 + matches[6].to_i * 60
             seconds += matches[8] ? matches[7].to_f : matches[7].to_i
             seconds *= -1 if matches[4] == '-'
             value += seconds
-            parts << [:seconds, seconds]
+            parts[:seconds] = seconds
           elsif matches[9] || matches[10] || matches[11]
             seconds = 0
             if v = matches[9]
@@ -101,8 +121,14 @@ module Sequel
               seconds += matches[12] ? v.to_f : v.to_i
             end
             value += seconds
-            parts << [:seconds, seconds]
+            parts[:seconds] = seconds
           end
+
+          # :nocov:
+          if USE_PARTS_ARRAY
+            parts = parts.to_a
+          end
+          # :nocov:
 
           ActiveSupport::Duration.new(value, parts)
         end

@@ -22,7 +22,7 @@ describe "A MSSQL database" do
     @db.dataset.server_version
   end
 end
-  
+
 describe "A MSSQL database" do
   before do
     @db = DB
@@ -37,6 +37,72 @@ describe "A MSSQL database" do
 
   it "should work with NOLOCK" do
     @db.transaction{@db[:test3].nolock.all.must_equal []}
+  end
+end
+
+describe "A MSSQL database" do
+  before do
+    @db = DB
+  end
+  after do
+    @db.drop_table?(:test3)
+  end
+
+  cspecify "should not modify column type when adding primary key", [:odbc] do
+    @db.create_table(:test3) do
+      column :row_id,   "int",              null: false, auto_increment: true
+      column :deviceid, "binary", size: 7,  null: false
+
+      index [:row_id], type: :clustered, unique: true
+    end
+    @db.alter_table(:test3) do
+      add_primary_key [:deviceid]
+    end
+    @db[:test3].insert(:deviceid=>Sequel.blob('abcdefg'))
+    @db[:test3].get(:deviceid).must_equal 'abcdefg'
+  end
+
+  it "should allow creating clustered and non-clustered primary keys" do
+    [true, false].each do |clustered|
+      @db.create_table!(:test3) do
+        primary_key :row_id, :clustered=>clustered
+        String :name
+      end
+    end
+  end
+
+  it "should allow creating clustered and non-clustered unique constraints" do
+    [true, false].each do |clustered|
+      @db.create_table!(:test3) do
+        Integer :row_id
+        String :name
+        unique [:name], :clustered=>clustered
+      end
+    end
+  end
+
+  it "should allow adding clustered and non-clustered primary keys" do
+    [true, false].each do |clustered|
+      @db.create_table!(:test3) do
+        Integer :row_id, :null=>false
+        String :name
+      end
+      @db.alter_table(:test3) do
+        add_primary_key [:row_id], :clustered=>clustered
+      end
+    end
+  end
+
+  it "should allow adding clustered and non-clustered unique constraints" do
+    [true, false].each do |clustered|
+      @db.create_table!(:test3) do
+        Integer :row_id, :null=>false
+        String :name
+      end
+      @db.alter_table(:test3) do
+        add_unique_constraint [:row_id], :clustered=>clustered
+      end
+    end
   end
 end
 
@@ -195,14 +261,14 @@ describe "MSSQL Dataset#output" do
     @db[:out].all.must_equal [{:name => "name", :value => 1}]
     @ds.insert(:name => "name", :value => 2)
     @ds.output(:out, {:name => Sequel[:deleted][:name], :value => Sequel[:deleted][:value]}).delete
-    @db[:out].all.must_equal [{:name => "name", :value => 1}, {:name => "name", :value => 2}]
+    @db[:out].order(:value).all.must_equal [{:name => "name", :value => 1}, {:name => "name", :value => 2}]
   end
 
   it "should execute OUTPUT clauses in INSERT statements" do
     @ds.output(:out, [Sequel[:inserted][:name], Sequel[:inserted][:value]]).insert(:name => "name", :value => 1)
     @db[:out].all.must_equal [{:name => "name", :value => 1}]
     @ds.output(:out, {:name => Sequel[:inserted][:name], :value => Sequel[:inserted][:value]}).insert(:name => "name", :value => 2)
-    @db[:out].all.must_equal [{:name => "name", :value => 1}, {:name => "name", :value => 2}]
+    @db[:out].order(:value).all.must_equal [{:name => "name", :value => 1}, {:name => "name", :value => 2}]
   end
 
   it "should execute OUTPUT clauses in UPDATE statements" do
@@ -210,7 +276,7 @@ describe "MSSQL Dataset#output" do
     @ds.output(:out, [Sequel[:inserted][:name], Sequel[:deleted][:value]]).update(:value => 2)
     @db[:out].all.must_equal [{:name => "name", :value => 1}]
     @ds.output(:out, {:name => Sequel[:inserted][:name], :value => Sequel[:deleted][:value]}).update(:value => 3)
-    @db[:out].all.must_equal [{:name => "name", :value => 1}, {:name => "name", :value => 2}]
+    @db[:out].order(:value).all.must_equal [{:name => "name", :value => 1}, {:name => "name", :value => 2}]
   end
 end
 

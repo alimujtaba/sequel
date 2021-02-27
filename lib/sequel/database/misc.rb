@@ -166,6 +166,7 @@ module Sequel
         end
 
         initialize_load_extensions(:extensions)
+        test_connection if typecast_value_boolean(@opts.fetch(:test, true)) && respond_to?(:connect, true)
       rescue
         Sequel.synchronize{::Sequel::DATABASES.delete(self)} if keep_reference
         raise
@@ -212,8 +213,7 @@ module Sequel
       Sequel.extension(*exts)
       exts.each do |ext|
         if pr = Sequel.synchronize{EXTENSIONS[ext]}
-          unless Sequel.synchronize{@loaded_extensions.include?(ext)}
-            Sequel.synchronize{@loaded_extensions << ext}
+          if Sequel.synchronize{@loaded_extensions.include?(ext) ? false : (@loaded_extensions << ext)}
             pr.call(self)
           end
         else
@@ -444,6 +444,19 @@ module Sequel
       else
         raise exception
       end
+    end
+
+    # Swallow database errors, unless they are connect/disconnect errors.
+    def swallow_database_error
+      yield
+    rescue Sequel::DatabaseDisconnectError, DatabaseConnectionError
+      # Always raise disconnect errors
+      raise
+    rescue Sequel::DatabaseError
+      # Don't raise other database errors.
+      nil
+    # else
+    #   Don't rescue other exceptions, they will be raised normally.
     end
 
     # Typecast the value to an SQL::Blob

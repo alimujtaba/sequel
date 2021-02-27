@@ -854,6 +854,7 @@ describe "DB#create_table?" do
     @db.create_table?(:cats){|*a| Integer :a, :index=>true}
     @db.sqls.must_equal ['CREATE TABLE cats (a integer)', 'CREATE INDEX cats_a_index ON cats (a)']
 
+    @db.singleton_class.send(:alias_method, :table_exists?, :table_exists?)
     @db.define_singleton_method(:table_exists?){|a| true}
     @db.create_table?(:cats){|*a| Integer :a, :index=>true}
     @db.sqls.must_equal []
@@ -931,6 +932,7 @@ describe "DB#create_join_table?" do
     @db.create_join_table?(:cat_id=>:cats, :dog_id=>:dogs)
     @db.sqls.must_equal ['CREATE TABLE cats_dogs (cat_id integer NOT NULL REFERENCES cats, dog_id integer NOT NULL REFERENCES dogs, PRIMARY KEY (cat_id, dog_id))', 'CREATE INDEX cats_dogs_dog_id_cat_id_index ON cats_dogs (dog_id, cat_id)']
 
+    @db.singleton_class.send(:alias_method, :table_exists?, :table_exists?)
     @db.define_singleton_method(:table_exists?){|a| true}
     @db.create_join_table?(:cat_id=>:cats, :dog_id=>:dogs)
     @db.sqls.must_equal []
@@ -1605,6 +1607,24 @@ describe "Database#create_view" do
     @db.sqls.must_equal ['DROP VIEW test', 'CREATE VIEW test AS SELECT a, b FROM items ORDER BY c']
     @db.create_or_replace_view Sequel.identifier(:test), @db[:items].select(:a, :b).order(:c)
     @db.sqls.must_equal ['DROP VIEW test', 'CREATE VIEW test AS SELECT a, b FROM items ORDER BY c']
+  end
+
+  it "should handle create_or_replace_view when DROP VIEW raises a database error" do
+    def @db.drop_view(*) super; raise Sequel::DatabaseError end
+    @db.create_or_replace_view :test, @db[:items].select(:a, :b).order(:c)
+    @db.sqls.must_equal ['DROP VIEW test', 'CREATE VIEW test AS SELECT a, b FROM items ORDER BY c']
+  end
+
+  it "should raise in create_or_replace_view when DROP VIEW raises a disconnect error" do
+    def @db.drop_view(*) super; raise Sequel::DatabaseDisconnectError end
+    proc{@db.create_or_replace_view :test, @db[:items].select(:a, :b).order(:c)}.must_raise Sequel::DatabaseDisconnectError
+    @db.sqls.must_equal ['DROP VIEW test']
+  end
+
+  it "should raise in create_or_replace_view when DROP VIEW raises a connect error" do
+    def @db.drop_view(*) super; raise Sequel::DatabaseConnectionError end
+    proc{@db.create_or_replace_view :test, @db[:items].select(:a, :b).order(:c)}.must_raise Sequel::DatabaseConnectionError
+    @db.sqls.must_equal ['DROP VIEW test']
   end
 
   it "should use CREATE OR REPLACE VIEW if such syntax is supported" do

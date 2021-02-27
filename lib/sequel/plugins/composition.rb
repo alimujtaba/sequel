@@ -143,10 +143,14 @@ module Sequel
                 compositions[name] = send(composer_meth)
               end
             end
-            define_method("#{name}=") do |v|
+            alias_method(name, name)
+
+            meth = :"#{name}="
+            define_method(meth) do |v|
               modified!
               compositions[name] = v
             end
+            alias_method(meth, meth)
           end
         end
 
@@ -167,8 +171,9 @@ module Sequel
 
         # Freeze compositions hash when freezing model instance.
         def freeze
-          compositions.freeze
+          compositions
           super
+          compositions.freeze
         end
 
         # For each composition, set the columns in the model class based

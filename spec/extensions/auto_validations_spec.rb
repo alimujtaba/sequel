@@ -14,11 +14,13 @@ describe "Sequel::Plugins::AutoValidations" do
        [:nnd, {:primary_key=>false, :type=>:string, :allow_null=>false, :default=>'nnd'}]]
     end
     def db.supports_index_parsing?() true end
+    db.singleton_class.send(:alias_method, :supports_index_parsing?, :supports_index_parsing?)
     def db.indexes(t, *)
       raise if t.is_a?(Sequel::Dataset)
       return [] if t != :test
       {:a=>{:columns=>[:name, :num], :unique=>true}, :b=>{:columns=>[:num], :unique=>false}}
     end
+    db.singleton_class.send(:alias_method, :indexes, :indexes)
     @c = Class.new(Sequel::Model(db[:test]))
     @c.send(:def_column_accessor, :id, :name, :num, :d, :nnd)
     @c.raise_on_typecast_failure = false
@@ -46,6 +48,27 @@ describe "Sequel::Plugins::AutoValidations" do
     @m.set(:name=>'a'*51)
     @m.valid?.must_equal false
     @m.errors.must_equal(:name=>["is longer than 50 characters"])
+  end
+
+  it "should add errors to columns that already have errors by default" do
+    def @m.validate
+      errors.add(:name, 'no good')
+      super
+    end
+    @m.d = Date.today
+    @m.valid?.must_equal false
+    @m.errors.must_equal(:name=>['no good', "is not present"])
+  end
+
+  it "should not add errors to columns that already have errors when using :skip_invalid plugin option" do
+    @c.plugin :auto_validations, :skip_invalid=>true
+    def @m.validate
+      errors.add(:name, 'no good')
+      super
+    end
+    @m.d = Date.today
+    @m.valid?.must_equal false
+    @m.errors.must_equal(:name=>['no good'])
   end
 
   it "should handle simple unique indexes correctly" do

@@ -12,10 +12,37 @@ rescue LoadError
 end
 DB.extension :pg_hstore if DB.type_supported?('hstore')
 
+describe 'A PostgreSQL database' do
+  before do
+    @db = DB
+  end
+  after do
+    @db.drop_table(:test)
+  end
+
+  it "should provide a list of existing ordinary tables" do
+    @db.create_table(:test){Integer :id}
+    @db.tables.must_include :test
+  end
+
+  it "should provide a list of existing partitioned tables" do
+    @db.create_table(:test, :partition_by => :id, :partition_type => :range){Integer :id}
+    @db.tables.must_include :test
+  end if DB.server_version >= 100000
+
+  it "should provide a list of existing ordinary and partitioned tables" do
+    @db.create_table(:test, :partition_by => :id, :partition_type => :range){Integer :id}
+    @db.create_table(:test_1, :partition_of => :test){from 1; to 3}
+    @db.create_table(:test_2, :partition_of => :test){from 3; to 4}
+    @db.tables.must_include :test
+    @db.tables.must_include :test_1
+    @db.tables.must_include :test_2
+  end if DB.server_version >= 100000
+end
+
 describe "PostgreSQL", '#create_table' do
   before do
     @db = DB
-    @db.test_connection
   end
   after do
     @db.drop_table?(:tmp_dolls, :unlogged_dolls)
@@ -160,51 +187,9 @@ describe "PostgreSQL", '#create_table' do
     @db[:tmp_dolls_3].order(:id).select_order_map(:id).must_equal [5]
   end if DB.server_version >= 100000 
 
-  it "should create a temporary table" do
-    @db.create_table(:tmp_dolls, :temp => true){text :name}
-    @db.table_exists?(:tmp_dolls).must_equal true
-    @db.disconnect
-    @db.table_exists?(:tmp_dolls).must_equal false
-  end
-
-  it "temporary table should support :on_commit option" do
-    @db.drop_table?(:some_table)
-    @db.transaction do
-      @db.create_table(:some_table, :temp => true, :on_commit => :drop){text :name}
-    end
-    @db.table_exists?(:some_table).must_equal false
-
-    @db.transaction do
-      @db.create_table(:some_table, :temp => true, :on_commit => :delete_rows){text :name}
-      @db[:some_table].insert('a')
-    end
-    @db.table_exists?(:some_table).must_equal true
-    @db[:some_table].empty?.must_equal true
-
-    @db.drop_table(:some_table)
-    @db.transaction do
-      @db.create_table(:some_table, :temp => true, :on_commit => :preserve_rows){text :name}
-      @db[:some_table].insert('a')
-    end
-    @db.table_exists?(:some_table).must_equal true
-    @db[:some_table].count.must_equal 1
-    @db.drop_table(:some_table)
-  end
-
-  it "temporary table should accept :on_commit with :as option" do
-    @db.drop_table?(:some_table)
-    @db.transaction do
-      @db.create_table(:some_table, :temp => true, :on_commit => :drop, :as => 'select 1')
-    end
-    @db.table_exists?(:some_table).must_equal false
-  end
-
-  it ":on_commit should raise error if not used on a temporary table" do
-    proc{@db.create_table(:some_table, :on_commit => :drop)}.must_raise(Sequel::Error)
-  end
-
-  it ":on_commit should raise error if given unsupported value" do
-    proc{@db.create_table(:some_table, :temp => true, :on_commit => :unsupported){text :name}}.must_raise(Sequel::Error)
+  it "should not use a size for text columns" do
+    @db.create_table(:tmp_dolls){String :description, text: true, size: :long}
+    @db.tables.must_include :tmp_dolls
   end
 
   it "should create an unlogged table" do
@@ -260,12 +245,6 @@ describe "PostgreSQL", '#create_table' do
       @db.run "DROP FUNCTION IF EXISTS valid_tmp_dolls(tmp_dolls)"
     end
   end if DB.server_version >= 90000
-
-  it "should not allow to pass both :temp and :unlogged" do
-    proc do
-      @db.create_table(:temp_unlogged_dolls, :temp => true, :unlogged => true){text :name}
-    end.must_raise(Sequel::Error, "can't provide both :temp and :unlogged to create_table")
-  end
 
   it "should support :if_exists option to drop_column" do
     @db.create_table(:tmp_dolls){Integer :a; Integer :b}
@@ -402,6 +381,80 @@ describe "PostgreSQL", '#create_table' do
   end
 end
 
+describe "PostgreSQL temporary table/view support" do
+  before(:all) do
+    @db = DB
+    @db.disconnect
+  end
+  after do
+    @db.drop_view(:tmp_dolls_view, :if_exists=>true, :cascade=>true) rescue nil
+    @db.drop_table?(:tmp_dolls)
+  end
+
+  it "should create a temporary table" do
+    @db.create_table(:tmp_dolls, :temp => true){text :name}
+    @db.table_exists?(:tmp_dolls).must_equal true
+    @db.disconnect
+    @db.table_exists?(:tmp_dolls).must_equal false
+  end
+
+  it "temporary table should support :on_commit option" do
+    @db.drop_table?(:some_table)
+    @db.transaction do
+      @db.create_table(:some_table, :temp => true, :on_commit => :drop){text :name}
+    end
+    @db.table_exists?(:some_table).must_equal false
+
+    @db.transaction do
+      @db.create_table(:some_table, :temp => true, :on_commit => :delete_rows){text :name}
+      @db[:some_table].insert('a')
+    end
+    @db.table_exists?(:some_table).must_equal true
+    @db[:some_table].empty?.must_equal true
+
+    @db.drop_table(:some_table)
+    @db.transaction do
+      @db.create_table(:some_table, :temp => true, :on_commit => :preserve_rows){text :name}
+      @db[:some_table].insert('a')
+    end
+    @db.table_exists?(:some_table).must_equal true
+    @db[:some_table].count.must_equal 1
+    @db.drop_table(:some_table)
+  end
+
+  it "temporary table should accept :on_commit with :as option" do
+    @db.drop_table?(:some_table)
+    @db.transaction do
+      @db.create_table(:some_table, :temp => true, :on_commit => :drop, :as => 'select 1')
+    end
+    @db.table_exists?(:some_table).must_equal false
+  end
+
+  it ":on_commit should raise error if not used on a temporary table" do
+    proc{@db.create_table(:some_table, :on_commit => :drop)}.must_raise(Sequel::Error)
+  end
+
+  it ":on_commit should raise error if given unsupported value" do
+    proc{@db.create_table(:some_table, :temp => true, :on_commit => :unsupported){text :name}}.must_raise(Sequel::Error)
+  end
+
+  it "should not allow to pass both :temp and :unlogged" do
+    proc do
+      @db.create_table(:temp_unlogged_dolls, :temp => true, :unlogged => true){text :name}
+    end.must_raise(Sequel::Error, "can't provide both :temp and :unlogged to create_table")
+  end
+
+  it "should support temporary views" do
+    @db.create_table(:tmp_dolls, :temp => true){Integer :number}
+    @db[:tmp_dolls].insert(10)
+    @db[:tmp_dolls].insert(20)
+    @db.create_view(:tmp_dolls_view, @db[:tmp_dolls].where(:number=>10), :temp=>true)
+    @db[:tmp_dolls_view].map(:number).must_equal [10]
+    @db.create_or_replace_view(:tmp_dolls_view, @db[:tmp_dolls].where(:number=>20),  :temp=>true)
+    @db[:tmp_dolls_view].map(:number).must_equal [20]
+  end
+end
+
 describe "PostgreSQL views" do
   before do
     @db = DB
@@ -414,13 +467,6 @@ describe "PostgreSQL views" do
     @opts ||={}
     @db.drop_view(:items_view, @opts.merge(:if_exists=>true, :cascade=>true)) rescue nil
     @db.drop_table?(:items)
-  end
-
-  it "should support temporary views" do
-    @db.create_view(:items_view, @db[:items].where(:number=>10), :temp=>true)
-    @db[:items_view].map(:number).must_equal [10]
-    @db.create_or_replace_view(:items_view, @db[:items].where(:number=>20),  :temp=>true)
-    @db[:items_view].map(:number).must_equal [20]
   end
 
   it "should support recursive views" do
@@ -2324,6 +2370,9 @@ if uses_pg && DB.server_version >= 90000
     end
 
     it "should support listen and notify" do
+      # Spec assumes only one connection currently in the pool (otherwise notify_pid will not be deterministic)
+      @db.disconnect
+
       notify_pid = @db.synchronize{|conn| conn.backend_pid}
 
       called = false
@@ -4045,6 +4094,9 @@ describe 'PostgreSQL interval types' do
   before(:all) do
     @db = DB
     @ds = @db[:items]
+    m = Sequel::Postgres::IntervalDatabaseMethods::Parser
+    @year = m::SECONDS_PER_YEAR
+    @month = m::SECONDS_PER_MONTH
   end
   after do
     @db.drop_table?(:items)
@@ -4063,14 +4115,14 @@ describe 'PostgreSQL interval types' do
       ['123000 hours', '123000:00:00', 442800000, [[:seconds, 442800000]]],
       ['1 day', '1 day', 86400, [[:days, 1]]],
       ['1 week', '7 days', 86400*7, [[:days, 7]]],
-      ['1 month', '1 mon', 86400*30, [[:months, 1]]],
-      ['1 year', '1 year', 31557600, [[:years, 1]]],
-      ['1 decade', '10 years', 31557600*10, [[:years, 10]]],
-      ['1 century', '100 years', 31557600*100, [[:years, 100]]],
-      ['1 millennium', '1000 years', 31557600*1000, [[:years, 1000]]],
-      ['1 year 2 months 3 weeks 4 days 5 hours 6 minutes 7 seconds', '1 year 2 mons 25 days 05:06:07', 31557600 + 2*86400*30 + 3*86400*7 + 4*86400 + 5*3600 + 6*60 + 7, [[:years, 1], [:months, 2], [:days, 25], [:seconds, 18367]]],
-      ['-1 year +2 months -3 weeks +4 days -5 hours +6 minutes -7 seconds', '-10 mons -17 days -04:54:07', -10*86400*30 - 3*86400*7 + 4*86400 - 5*3600 + 6*60 - 7, [[:months, -10], [:days, -17], [:seconds, -17647]]],
-      ['+2 years -1 months +3 weeks -4 days +5 hours -6 minutes +7 seconds', '1 year 11 mons 17 days 04:54:07', 31557600 + 11*86400*30 + 3*86400*7 - 4*86400 + 5*3600 - 6*60 + 7, [[:years, 1], [:months, 11], [:days, 17], [:seconds, 17647]]],
+      ['1 month', '1 mon', @month, [[:months, 1]]],
+      ['1 year', '1 year', @year, [[:years, 1]]],
+      ['1 decade', '10 years', @year*10, [[:years, 10]]],
+      ['1 century', '100 years', @year*100, [[:years, 100]]],
+      ['1 millennium', '1000 years', @year*1000, [[:years, 1000]]],
+      ['1 year 2 months 3 weeks 4 days 5 hours 6 minutes 7 seconds', '1 year 2 mons 25 days 05:06:07', @year + 2*@month + 3*86400*7 + 4*86400 + 5*3600 + 6*60 + 7, [[:years, 1], [:months, 2], [:days, 25], [:seconds, 18367]]],
+      ['-1 year +2 months -3 weeks +4 days -5 hours +6 minutes -7 seconds', '-10 mons -17 days -04:54:07', -10*@month - 3*86400*7 + 4*86400 - 5*3600 + 6*60 - 7, [[:months, -10], [:days, -17], [:seconds, -17647]]],
+      ['+2 years -1 months +3 weeks -4 days +5 hours -6 minutes +7 seconds', '1 year 11 mons 17 days 04:54:07', @year + 11*@month + 3*86400*7 - 4*86400 + 5*3600 - 6*60 + 7, [[:years, 1], [:months, 11], [:days, 17], [:seconds, 17647]]],
     ].each do |instr, outstr, value, parts|
       @ds.insert(instr)
       @ds.count.must_equal 1
@@ -4093,7 +4145,7 @@ describe 'PostgreSQL interval types' do
     rs = @ds.all
     rs.first[:i].is_a?(Sequel::Postgres::PGArray).must_equal true
     rs.first[:i].first.is_a?(ActiveSupport::Duration).must_equal true
-    rs.first[:i].first.must_equal ActiveSupport::Duration.new(31557600 + 2*86400*30 + 3*86400*7 + 4*86400 + 5*3600 + 6*60 + 7, [[:years, 1], [:months, 2], [:days, 25], [:seconds, 18367]])
+    rs.first[:i].first.must_equal ActiveSupport::Duration.new(@year + 2*@month + 3*86400*7 + 4*86400 + 5*3600 + 6*60 + 7, [[:years, 1], [:months, 2], [:days, 25], [:seconds, 18367]])
     rs.first[:i].first.parts.sort_by{|k,v| k.to_s}.must_equal [[:years, 1], [:months, 2], [:days, 25], [:seconds, 18367]].sort_by{|k,v| k.to_s}
     @ds.delete
     @ds.insert(rs.first)
@@ -4128,6 +4180,22 @@ describe 'PostgreSQL interval types' do
     @db.schema(:items)[1][1][:ruby_default].must_equal ActiveSupport::Duration.new(3*86400, :days=>3)
   end
 
+  it 'correctly handles round tripping interval values' do
+    @db.create_table!(:items) do
+      interval :i
+      interval :j
+    end
+    d = Sequel.cast(Date.new(2020, 2, 1), Date)
+    {'30 days'=>Date.new(2020, 3, 2), '1 month'=>Date.new(2020, 3, 1)}.each do |interval, result|
+      @ds.insert(:i=>interval)
+      @ds.update(:j=>@ds.get(:i))
+      @ds.where(:i=>:j).count.must_equal 1
+      @ds.get{(d+:i).cast(Date).as(:v)}.must_equal result
+      @ds.get{(d+:j).cast(Date).as(:v)}.must_equal result
+      @ds.delete
+    end
+  end
+
   it 'with models' do
     @db.create_table!(:items) do
       primary_key :id
@@ -4136,7 +4204,7 @@ describe 'PostgreSQL interval types' do
     c = Class.new(Sequel::Model(@db[:items]))
     v = c.create(:i=>'1 year 2 mons 25 days 05:06:07').i
     v.is_a?(ActiveSupport::Duration).must_equal true
-    v.must_equal ActiveSupport::Duration.new(31557600 + 2*86400*30 + 3*86400*7 + 4*86400 + 5*3600 + 6*60 + 7, [[:years, 1], [:months, 2], [:days, 25], [:seconds, 18367]])
+    v.must_equal ActiveSupport::Duration.new(@year + 2*@month + 3*86400*7 + 4*86400 + 5*3600 + 6*60 + 7, [[:years, 1], [:months, 2], [:days, 25], [:seconds, 18367]])
     v.parts.sort_by{|k,_| k.to_s}.must_equal [[:years, 1], [:months, 2], [:days, 25], [:seconds, 18367]].sort_by{|k,_| k.to_s}
   end
 end if (begin require 'active_support/duration'; require 'active_support/inflector'; require 'active_support/core_ext/string/inflections'; true; rescue LoadError; false end)
@@ -4331,6 +4399,16 @@ describe 'PostgreSQL row-valued/composite types' do
       Object.send(:remove_const, :Address) rescue nil
       Object.send(:remove_const, :Person) rescue nil
       Object.send(:remove_const, :Company) rescue nil
+    end
+
+    it 'create model objects whose values are model instances using pg_row' do
+      person = Person.create(:id=>1, :address=>@a)
+      person.address.must_equal @a
+      Person.count.must_equal 1
+
+      company = Company.create(:employees=>[person])
+      company.employees.must_equal [person]
+      Company.count.must_equal 1
     end
 
     it 'insert and retrieve row types as model objects' do

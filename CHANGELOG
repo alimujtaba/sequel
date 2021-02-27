@@ -1,5 +1,69 @@
 === master
 
+* Make the ado timestamp conversion proc a normal conversion proc that can be overridden similar to other conversion procs (jeremyevans)
+
+* Add :reject_nil option to the nested_attributes method, to ignore calls where nil is passed as the associated object data (jeremyevans)
+
+* Add async_thread_pool plugin for easier async usage with model classes and support for async destroy, with_pk, and with_pk! methods (jeremyevans)
+
+* Add async_thread_pool Database extension for executing queries asynchronously using a thread pool (jeremyevans)
+
+* Fix possible thread safety issue in Database#extension that could allow Module#extended to be called twice with the same Database instance (jeremyevans)
+
+* Support cases where validations make modifications beyond setting errors in Model#freeze (jeremyevans)
+
+* Add Model#to_json_data to the json_serializer plugin, returning a JSON data structure (jeremyevans)
+
+=== 5.41.0 (2021-02-01)
+
+* Have explicit :text option for a String column take priority over :size option on PostgreSQL (jeremyevans) (#1750)
+
+* Support a :skip_invalid option in auto_validations plugin for not adding errors to a column that already has an error (jeremyevans)
+
+* Support a :skip_invalid option in validation_helpers for not adding an error to a column that already has an error (jeremyevans)
+
+* Support :adder, :remover, and :clearer association options that use keyword arguments in Ruby 2.7+ (jeremyevans)
+
+* Make pg_interval use the same number of seconds per year and per month as ActiveSupport::Duration when using ActiveSupport 5.1+ (jeremyevans)
+
+=== 5.40.0 (2021-01-01)
+
+* Support UPDATE FROM syntax in SQLite 3.33.0+ (jeremyevans)
+
+* Have pg_interval extension work with ActiveSupport 6.1 (jeremyevans)
+
+* Have date_arithmetic extension work with ActiveSupport 6.1 (jeremyevans)
+
+* Avoid method redefinition warnings in verbose warning mode (jeremyevans)
+
+=== 5.39.0 (2020-12-01)
+
+* Support :clustered option for primary key and unique constraints on Microsoft SQL Server (jeremyevans)
+
+* Do not modify the size of binary columns when using set_column_allow_null on Microsoft SQL Server (jeremyevans) (#1736)
+
+* Add a fork safety guide with more detail on how to use Sequel with libraries that fork (janko) (#1733)
+
+* Make the roots_dataset method in the tree plugin work with queries using joins (jeremyevans) (#1731)
+
+* Make Database#tables return partitioned tables on PostgreSQL 10+ (epoberezhny) (#1729, #1730)
+
+=== 5.38.0 (2020-11-01)
+
+* Do not add new Database instances to Sequel::DATABASES if the test connection fails (jeremyevans) (#1727)
+
+* Support the newer com.mysql.cj.jdbc.Driver in the jdbc/mysql adapter (jeremyevans)
+
+* Do not swallow disconnect errors in Database#create_or_replace_view or Database#create_table* on Oracle (jeremyevans)
+
+* Only rescue non-disconnect Sequel::DatabaseErrors in Postgres::Database#server_version (jeremyevans) (#1724)
+
+* Make the single_table_inheritance and prepared_statements plugins work if loaded into the same class (jeremyevans) (#1721)
+
+=== 5.37.0 (2020-10-01)
+
+* Recognize more unsigned decimal/float types in the schema dumper (akimd, jeremyevans) (#1720)
+
 * Add Postgres::PGRow::{Array,Hash}Row#op to the pg_row_ops extension if the pg_row extension is loaded (jeremyevans)
 
 * Add Model#column_previously_was and #column_previously_changed? to the dirty plugin (jeremyevans)

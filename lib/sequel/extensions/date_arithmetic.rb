@@ -49,14 +49,13 @@ module Sequel
       # Options:
       # :cast :: Cast to the specified type instead of the default if casting
       def date_sub(expr, interval, opts=OPTS)
-        interval = if interval.is_a?(Hash)
-          h = {}
-          interval.each{|k,v| h[k] = -v unless v.nil?}
-          h
-        else
-          -interval
+        if defined?(ActiveSupport::Duration) && interval.is_a?(ActiveSupport::Duration)
+          interval = interval.parts
         end
-        DateAdd.new(expr, interval, opts)
+        parts = {}
+        interval.each{|k,v| parts[k] = -v unless v.nil?}
+        parts
+        DateAdd.new(expr, parts, opts)
       end
     end
 
@@ -113,12 +112,12 @@ module Sequel
             end
           when :mssql, :h2, :access, :sqlanywhere
             units = case db_type
-            when :mssql, :sqlanywhere
-              MSSQL_DURATION_UNITS
             when :h2
               H2_DURATION_UNITS
             when :access
               ACCESS_DURATION_UNITS
+            else
+              MSSQL_DURATION_UNITS
             end
             each_valid_interval_unit(h, units) do |value, sql_unit|
               expr = Sequel.function(:DATEADD, sql_unit, value, expr)

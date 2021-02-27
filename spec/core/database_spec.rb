@@ -65,6 +65,19 @@ describe "A new Database" do
     cc.must_equal 1234
   end
 
+  it "should not add the instance to Sequel::DATABASES if testing the connection during initialization fails" do
+    c = Class.new(Sequel::Database) do
+      def connect(*) raise end
+    end
+    num_dbs = Sequel::DATABASES.size
+    proc{c.new}.must_raise Sequel::DatabaseConnectionError
+    Sequel::DATABASES.size.must_equal num_dbs
+
+    db = c.new(:test=>false)
+    Sequel::DATABASES.size.must_equal(num_dbs+1)
+    Sequel::DATABASES[-1].must_equal db
+  end
+
   it "should respect the :single_threaded option" do
     db = Sequel::Database.new(:single_threaded=>true){123}
     db.pool.must_be_kind_of(Sequel::SingleConnectionPool)
@@ -732,6 +745,7 @@ describe "Database#test_connection" do
   end
 
   it "should raise an error if the attempting to connect raises an error" do
+    @db.singleton_class.send(:alias_method, :connect, :connect)
     def @db.connect(*) raise Sequel::Error end
     proc{@db.test_connection}.must_raise(Sequel::DatabaseConnectionError)
   end
@@ -2728,6 +2742,7 @@ describe "Database#column_schema_to_ruby_default" do
   it "should handle converting many default formats" do
     db = Sequel::Database.new
     p = lambda{|d,t| db.send(:column_schema_to_ruby_default, d, t)}
+    p['any', :unknown].must_be_nil
     p[nil, :integer].must_be_nil
     p[1, :integer].must_equal 1
     p['1', :integer].must_equal 1
@@ -2745,6 +2760,7 @@ describe "Database#column_schema_to_ruby_default" do
     p['false', :boolean].must_equal false
     p["'t'", :boolean].must_equal true
     p["'f'", :boolean].must_equal false
+    p["'x'", :boolean].must_be_nil
     p["'a'", :string].must_equal 'a'
     p["'a'", :blob].must_equal Sequel.blob('a')
     p["'a'", :blob].must_be_kind_of(Sequel::SQL::Blob)
@@ -2935,6 +2951,8 @@ describe "Database specific exception classes" do
     proc{@db.get(:a)}.must_raise(Sequel::CheckConstraintViolation)
     @db.sql_state = '40001'
     proc{@db.get(:a)}.must_raise(Sequel::SerializationFailure)
+    @db.sql_state = '41245'
+    proc{@db.get(:a)}.must_raise(Sequel::DatabaseError)
     def @db.database_specific_error_class_from_sqlstate(_) end
     (@db.get(:a) rescue $!.class).must_equal(Sequel::DatabaseError)
     @db.sql_state = nil

@@ -34,6 +34,11 @@ describe "Sequel::Plugins::JsonSerializer" do
     Album.from_json(@album.to_json).must_equal @album
   end
 
+  it "should support to_json_data for getting a JSON data structure" do
+    @artist.to_json_data.must_equal("id"=>2, "name"=>"YJM")
+    @album.to_json_data.must_equal("id"=>1, "name"=>"RF", "artist_id"=>2)
+  end
+
   it "should handle ruby objects in values" do
     class ::Artist
       def name=(v)
@@ -92,6 +97,7 @@ describe "Sequel::Plugins::JsonSerializer" do
         def parse_json(v)
           v
         end
+        alias parse_json parse_json
       end
       proc{Album.from_json('1')}.must_raise(Sequel::Error)
     ensure
@@ -108,6 +114,7 @@ describe "Sequel::Plugins::JsonSerializer" do
         def parse_json(v)
           Album.load(:id=>3)
         end
+        alias parse_json parse_json
       end
       ::Album.from_json('1').must_equal Album.load(:id=>3)
     ensure
@@ -362,6 +369,7 @@ describe "Sequel::Plugins::JsonSerializer" do
           else raise
           end
         end
+        alias parse_json parse_json
       end
       Artist.array_from_json('[artists]').must_equal [Artist.load(:id=>1)]
 
